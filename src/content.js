@@ -1,18 +1,17 @@
-import elementReady from 'element-ready';
-import SimpleDropzone from 'simple-dropzone';
+import elementReady from 'element-ready'
+import SimpleDropzone from 'simple-dropzone'
+import uuid from 'uuid'
+import './styles/content.less'
+import uploadEmoji, { getAllEmoji } from './upload-emoji'
 
-import CSSLoaded from './styles/content.less';
-
-import uploadEmoji from './upload-emoji';
-
-const ELEMENT_TO_INSERT_BEFORE_SELECTOR = '.p-customize_emoji_wrapper';
-const SET_ICON_URL = chrome.runtime.getURL('images/icon_128.png');
+const ELEMENT_TO_INSERT_BEFORE_SELECTOR = '.p-customize_emoji_wrapper'
+const SET_ICON_URL = chrome.runtime.getURL('images/icon_128.png')
 
 function createUploadElement (upload) {
-  const filePreview = window.URL.createObjectURL(upload.file);
-  const element = document.createElement('li');
-  element.id = `nfet__upload-${upload.id}`;
-  element.classList.add('nfet__uploader__upload');
+  const filePreview = window.URL.createObjectURL(upload.file)
+  const element = document.createElement('li')
+  element.id = `nfet__upload-${upload.id}`
+  element.classList.add('nfet__uploader__upload')
   element.innerHTML = `
     <img class="nfet__uploader__upload__preview" src="${filePreview}" />
     <span class="nfet__uploader__upload__filename">${upload.file.name}</span>
@@ -21,18 +20,24 @@ function createUploadElement (upload) {
       <i class="nfet__uploader__upload__status__icon nfet__uploader__upload__status__icon-error ts_icon ts_icon_warning"></i>
       <i class="nfet__uploader__upload__status__icon nfet__uploader__upload__status__icon-success ts_icon ts_icon_check_circle_o"></i>
       <span class="nfet__uploader__upload__status__text"></span>
-    </span>`;
+    </span>`
 
-  return element;
+  return element
 }
 
-elementReady(ELEMENT_TO_INSERT_BEFORE_SELECTOR).then(() => {
-    const elementToInsertBefore = document.querySelector(ELEMENT_TO_INSERT_BEFORE_SELECTOR);
-    const containerDvi = document.createElement('div');
+Promise.all([
+  getAllEmoji(),
+  elementReady(ELEMENT_TO_INSERT_BEFORE_SELECTOR)
+]).then(([allEmoji]) => {
+  const emojiSet = new Set(allEmoji.map(({ name }) => name))
+  const elementToInsertBefore = document.querySelector(
+    ELEMENT_TO_INSERT_BEFORE_SELECTOR
+  )
+  const containerDvi = document.createElement('div')
 
-    elementToInsertBefore.before(containerDvi);
+  elementToInsertBefore.before(containerDvi)
 
-    containerDvi.innerHTML = `
+  containerDvi.innerHTML = `
       <div class="neutral-face-emoji-tools">
         <h4 class="nfet__uploader__heading">
           <img class="nfet__uploader__heading__icon" src="${SET_ICON_URL}"></img>
@@ -47,30 +52,75 @@ elementReady(ELEMENT_TO_INSERT_BEFORE_SELECTOR).then(() => {
           <input class="nfet__uploader__dropzone__input" id="nfet-upload-input" type="file" />
         </div>
         <ul class="nfet__uploader__uploads"></ul>
-      </div>`;
-    const uploadInputElement = document.querySelector('#nfet-upload-input');
-    const uploadZoneElement = document.querySelector('#nfet-upload-zone');
-    const dropzone = new SimpleDropzone(uploadZoneElement, uploadInputElement);
+      </div>`
+  const uploadInputElement = document.querySelector('#nfet-upload-input')
+  const uploadZoneElement = document.querySelector('#nfet-upload-zone')
+  const dropzone = new SimpleDropzone(uploadZoneElement, uploadInputElement)
 
-    dropzone.on('drop', ({ files }) => {
-      const uploadsElement = document.querySelector('.neutral-face-emoji-tools .nfet__uploader__uploads');
+  dropzone.on('drop', ({ files }) => {
+    const uploadsElement = document.querySelector(
+      '.neutral-face-emoji-tools .nfet__uploader__uploads'
+    )
 
-      files.forEach(file => {
-        let uploadElement;
-        const id = uploadEmoji(file, (error) => {
+    files = Array.from(files.values())
+    console.log(`****** Received ${files.length} dropped files`)
+
+    setTimeout(uploadOne, 0)
+    let grace = 200
+
+    function uploadOne () {
+      if (files.length === 0) {
+        return
+      }
+
+      const file = files.shift()
+      let uploadElement
+
+      const isDupe = emojiSet.has(file.name.split('.')[0])
+      let id
+
+      if (isDupe) {
+        id = uuid.v4()
+        setTimeout(() => {
+          uploadElement.classList.add('nfet__uploader__upload--error')
+          uploadElement.querySelector(
+            '.nfet__uploader__upload__status__text'
+          ).innerText = 'A custom emoji with this name already exists'
+          setTimeout(uploadOne, 0)
+        }, 5)
+      } else {
+        id = uploadEmoji(file, error => {
           if (error) {
-            uploadElement.classList.add('nfet__uploader__upload--error');
-            uploadElement.querySelector('.nfet__uploader__upload__status__text').innerText = error;
+            uploadElement.classList.add('nfet__uploader__upload--error')
+            uploadElement.querySelector(
+              '.nfet__uploader__upload__status__text'
+            ).innerText = error
+
+            if (['error_name_taken', 'error_name_taken_i18n'].includes(error)) {
+              console.log(`Error uploading ${file.name} - name already taken?!`)
+            } else {
+              grace = grace < 3000 ? grace + 1000 : 3000
+              files.push(file)
+              console.log(
+                `Error uploading ${
+                  file.name
+                } - backing off to ${grace}ms grace period`
+              )
+            }
           } else {
-            uploadElement.classList.add('nfet__uploader__upload--success');
-            uploadElement.querySelector('.nfet__uploader__upload__status__text').innerText = 'added successfully';
+            uploadElement.classList.add('nfet__uploader__upload--success')
+            uploadElement.querySelector(
+              '.nfet__uploader__upload__status__text'
+            ).innerText = 'added successfully'
           }
-        });
-        uploadElement = createUploadElement({
-          id,
-          file
-        });
-        uploadsElement.appendChild(uploadElement);
-      });
-    });
-});
+          setTimeout(uploadOne, grace)
+        })
+      }
+      uploadElement = createUploadElement({
+        id,
+        file
+      })
+      uploadsElement.prepend(uploadElement)
+    }
+  })
+})

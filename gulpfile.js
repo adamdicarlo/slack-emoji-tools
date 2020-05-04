@@ -45,6 +45,7 @@ gulp.task( 'compile and watch content.js', function(){
 
 gulp.task( 'copy static files', function(){
 	gulp.src([
+    './src/emoji-tools-in-page.js',
 		'./src/manifest.json',
 		'./src/images/**/*'
 	], { base: './src' })
@@ -53,6 +54,7 @@ gulp.task( 'copy static files', function(){
 
 gulp.task( 'watch static files', function(){
 	gulp.watch([
+    './src/emoji-tools-in-page.js',
 		'./src/manifest.json',
 		'./src/images/**/*'
 	], ['copy static files']);
