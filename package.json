@@ -45,6 +45,9 @@
     "superagent-throttle": "^0.2.5",
     "uuid": "^2.0.1"
   },
+  "resolutions": {
+    "graceful-fs": "^4.2.4"
+  },
   "browserify": {
     "debug": true,
     "transform": [
